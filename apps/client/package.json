@@ -1,0 +1,23 @@
+{
+  "name": "@jinshi-territory/client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5175",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@colyseus/sdk": "^0.17.43",
+    "@discord/embedded-app-sdk": "^2.5.0",
+    "@jinshi-territory/shared": "0.1.0",
+    "pixi.js": "^8.19.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
+  }
+}

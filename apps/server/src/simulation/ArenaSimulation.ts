@@ -1,0 +1,422 @@
+import {
+  BOT_NAMES,
+  GAME,
+  PLAYER_SKINS,
+  advancePlayer,
+  finiteMovement,
+  normalizeAngle,
+  playerSkin,
+  type DeathMessage,
+  type JoinOptions,
+  type LeaderboardEntry,
+  type PlayerEntity,
+  type PlayerMovementMessage,
+  type PlayerSnapshot,
+  type Vec2
+} from '@jinshi-territory/shared';
+import { BotSystem } from './BotSystem.js';
+import { Random } from './Random.js';
+import { TerritoryGrid } from './TerritoryGrid.js';
+
+interface SimulationOptions {
+  seed?: number;
+  botTarget?: number;
+  onDeath?: (playerId: string, message: DeathMessage) => void;
+}
+
+export class ArenaSimulation {
+  readonly players = new Map<string, PlayerEntity>();
+  readonly territory = new TerritoryGrid();
+  readonly random: Random;
+  readonly botSystem: BotSystem;
+  readonly trailOwners = new Int16Array(GAME.gridSize * GAME.gridSize);
+  running = false;
+  tick = 0;
+  private readonly botTarget: number;
+  private readonly onDeath: ((playerId: string, message: DeathMessage) => void) | undefined;
+  private nextTerritoryKey = 1;
+
+  constructor(options: SimulationOptions = {}) {
+    this.random = new Random(options.seed);
+    this.botSystem = new BotSystem(this.random);
+    this.botTarget = options.botTarget ?? GAME.botTarget;
+    this.onDeath = options.onDeath;
+  }
+
+  start(now = Date.now()): void {
+    if (this.running) return;
+    this.running = true;
+    this.ensureBotCount(this.botTarget, now);
+  }
+
+  stop(): void {
+    this.running = false;
+  }
+
+  clear(): void {
+    this.stop();
+    this.players.clear();
+    this.trailOwners.fill(0);
+    this.botSystem.clear();
+    this.tick = 0;
+  }
+
+  addHuman(id: string, options: JoinOptions, now = Date.now()): PlayerEntity {
+    const existing = this.players.get(id);
+    if (existing) return existing;
+    const player = this.createPlayer(
+      id,
+      options.playerId,
+      options.displayName,
+      'human',
+      options.skinId ?? PLAYER_SKINS[0].id,
+      now
+    );
+    this.players.set(id, player);
+    return player;
+  }
+
+  removeHuman(id: string): void {
+    const player = this.players.get(id);
+    if (!player) return;
+    this.clearTrail(player);
+    this.territory.clearOwner(player.territoryKey);
+    this.players.delete(id);
+    this.refreshTerritoryCounts();
+  }
+
+  applyMovement(id: string, movement: PlayerMovementMessage, now = Date.now()): boolean {
+    const player = this.players.get(id);
+    if (!player || player.kind !== 'human' || !player.alive) return false;
+    if (
+      !finiteMovement(movement) ||
+      movement.sequence <= player.lastMovementSequence ||
+      !Number.isFinite(movement.clientTime)
+    )
+      return false;
+    if (now - player.lastMovementAt < 1000 / GAME.movementRateLimit) return false;
+    player.lastMovementSequence = movement.sequence;
+    player.lastMovementAt = now;
+    player.targetAngle = normalizeAngle(movement.angle);
+    return true;
+  }
+
+  step(deltaSeconds = 1 / GAME.tickRate, now = Date.now()): void {
+    if (!this.running) return;
+    this.tick += 1;
+    this.ensureBotCount(this.botTarget, now);
+
+    for (const player of this.players.values()) {
+      if (!player.alive && now >= player.respawnAt) this.respawn(player, now);
+    }
+
+    for (const player of this.players.values()) {
+      if (!player.alive) continue;
+      if (player.kind === 'bot')
+        this.botSystem.update(player, this.players.values(), this.territory, now);
+      this.movePlayer(player, deltaSeconds, now);
+    }
+  }
+
+  ensureBotCount(target = this.botTarget, now = Date.now()): void {
+    const bots = [...this.players.values()].filter((player) => player.kind === 'bot');
+    while (bots.length < target) {
+      const index = bots.length;
+      const id = `bot-${index}-${Math.floor(this.random.next() * 1_000_000)}`;
+      const skin = PLAYER_SKINS[this.random.integer(0, PLAYER_SKINS.length)] ?? PLAYER_SKINS[0];
+      const player = this.createPlayer(
+        id,
+        id,
+        BOT_NAMES[index % BOT_NAMES.length] ?? `Bot ${index + 1}`,
+        'bot',
+        skin.id,
+        now
+      );
+      this.players.set(id, player);
+      bots.push(player);
+    }
+    while (bots.length > target) {
+      const player = bots.pop();
+      if (player) {
+        this.clearTrail(player);
+        this.territory.clearOwner(player.territoryKey);
+        this.players.delete(player.id);
+      }
+    }
+    this.refreshTerritoryCounts();
+  }
+
+  get humanCount(): number {
+    return [...this.players.values()].filter((player) => player.kind === 'human').length;
+  }
+
+  get botCount(): number {
+    return [...this.players.values()].filter((player) => player.kind === 'bot' && player.alive)
+      .length;
+  }
+
+  leaderboard(): LeaderboardEntry[] {
+    return [...this.players.values()]
+      .filter((player) => player.alive)
+      .map((player) => ({
+        id: player.id,
+        name: player.name,
+        percentage: this.percentage(player.territoryCells),
+        kills: player.kills,
+        kind: player.kind
+      }))
+      .sort((a, b) => b.percentage - a.percentage || b.kills - a.kills)
+      .slice(0, GAME.leaderboardSize);
+  }
+
+  playerSnapshots(now = Date.now()): PlayerSnapshot[] {
+    return [...this.players.values()].map((player) => ({
+      id: player.id,
+      name: player.name,
+      kind: player.kind,
+      skinId: player.skinId,
+      color: player.color,
+      territoryKey: player.territoryKey,
+      x: round(player.x),
+      y: round(player.y),
+      angle: round(player.angle),
+      kills: player.kills,
+      deaths: player.deaths,
+      alive: player.alive,
+      protected: now < player.protectedUntil,
+      respawnAt: player.respawnAt,
+      acknowledgedMovement: player.lastMovementSequence,
+      territoryCells: player.territoryCells,
+      drawing: player.drawing,
+      trail: player.trail.map((point) => ({ x: round(point.x), y: round(point.y) }))
+    }));
+  }
+
+  percentage(cells: number): number {
+    return Math.round((cells / this.territory.claimableCells) * 10_000) / 100;
+  }
+
+  private createPlayer(
+    id: string,
+    playerId: string,
+    name: string,
+    kind: 'human' | 'bot',
+    skinId: string,
+    now: number
+  ): PlayerEntity {
+    const skin = playerSkin(skinId);
+    const spawn = this.findSpawn();
+    const territoryKey = this.allocateTerritoryKey();
+    const angle = this.random.range(-Math.PI, Math.PI);
+    const player: PlayerEntity = {
+      id,
+      playerId,
+      name,
+      kind,
+      skinId: skin.id,
+      color: skin.color,
+      territoryKey,
+      x: spawn.x,
+      y: spawn.y,
+      angle,
+      targetAngle: angle,
+      kills: 0,
+      deaths: 0,
+      alive: true,
+      protectedUntil: now + GAME.spawnProtectionMs,
+      spawnedAt: now,
+      respawnAt: 0,
+      lastMovementSequence: 0,
+      lastMovementAt: 0,
+      territoryCells: 0,
+      drawing: false,
+      trail: [],
+      trailCells: new Set<number>(),
+      lastTrailCell: this.territory.worldToIndex(spawn.x, spawn.y)
+    };
+    player.territoryCells = this.territory.createStartingTerritory(territoryKey, spawn);
+    return player;
+  }
+
+  private respawn(player: PlayerEntity, now: number): void {
+    this.clearTrail(player);
+    this.territory.clearOwner(player.territoryKey);
+    const spawn = this.findSpawn();
+    const angle = this.random.range(-Math.PI, Math.PI);
+    player.x = spawn.x;
+    player.y = spawn.y;
+    player.angle = angle;
+    player.targetAngle = angle;
+    player.alive = true;
+    player.drawing = false;
+    player.protectedUntil = now + GAME.spawnProtectionMs;
+    player.spawnedAt = now;
+    player.respawnAt = 0;
+    player.lastTrailCell = this.territory.worldToIndex(spawn.x, spawn.y);
+    player.territoryCells = this.territory.createStartingTerritory(player.territoryKey, spawn);
+    this.refreshTerritoryCounts();
+  }
+
+  private movePlayer(player: PlayerEntity, deltaSeconds: number, now: number): void {
+    const previousIndex = this.territory.worldToIndex(player.x, player.y);
+    const next = advancePlayer(player, player.targetAngle, deltaSeconds);
+    player.x = next.x;
+    player.y = next.y;
+    player.angle = next.angle;
+
+    const currentIndex = this.territory.worldToIndex(player.x, player.y);
+    if (
+      currentIndex < 0 ||
+      Math.hypot(player.x, player.y) >= GAME.arenaRadius - GAME.playerRadius
+    ) {
+      this.killPlayer(player, { reason: 'boundary' }, now);
+      return;
+    }
+
+    const ownsCurrent = this.territory.owner(currentIndex) === player.territoryKey;
+    if (!player.drawing && !ownsCurrent) {
+      player.drawing = true;
+      player.trail = [{ x: player.x, y: player.y }];
+      player.lastTrailCell = previousIndex >= 0 ? previousIndex : currentIndex;
+    }
+
+    if (player.drawing) {
+      const cells = rasterLine(player.lastTrailCell, currentIndex, GAME.gridSize);
+      for (const index of cells) {
+        if (this.territory.owner(index) === player.territoryKey) continue;
+        const trailOwnerKey = this.trailOwners[index] ?? 0;
+        if (trailOwnerKey !== 0 && trailOwnerKey !== player.territoryKey) {
+          const victim = this.playerByTerritoryKey(trailOwnerKey);
+          if (victim?.alive) this.killPlayer(victim, { reason: 'trail', killerId: player.id }, now);
+        }
+        this.trailOwners[index] = player.territoryKey;
+        player.trailCells.add(index);
+      }
+      player.lastTrailCell = currentIndex;
+      this.recordTrailPoint(player);
+    }
+
+    if (player.drawing && ownsCurrent && player.trailCells.size > 0) {
+      this.territory.closeLoop(player.territoryKey, player.trailCells);
+      this.clearTrail(player);
+      player.drawing = false;
+      this.refreshTerritoryCounts();
+    } else if (!player.drawing) {
+      player.lastTrailCell = currentIndex;
+    }
+  }
+
+  private recordTrailPoint(player: PlayerEntity): void {
+    const last = player.trail.at(-1);
+    if (last && (player.x - last.x) ** 2 + (player.y - last.y) ** 2 < GAME.trailPointSpacing ** 2)
+      return;
+    player.trail.push({ x: player.x, y: player.y });
+    if (player.trail.length > GAME.maximumTrailPoints)
+      player.trail.splice(0, player.trail.length - GAME.maximumTrailPoints);
+  }
+
+  private killPlayer(
+    player: PlayerEntity,
+    death: { reason: DeathMessage['reason']; killerId?: string },
+    now: number
+  ): void {
+    if (!player.alive) return;
+    player.alive = false;
+    player.deaths += 1;
+    player.respawnAt = now + GAME.respawnDelayMs;
+    this.clearTrail(player);
+    this.territory.clearOwner(player.territoryKey);
+    player.territoryCells = 0;
+
+    const killer = death.killerId ? this.players.get(death.killerId) : undefined;
+    if (killer && killer.id !== player.id) killer.kills += 1;
+    if (player.kind === 'human') {
+      this.onDeath?.(player.id, {
+        reason: death.reason,
+        ...(killer ? { killerName: killer.name } : {}),
+        respawnAt: player.respawnAt
+      });
+    }
+    this.refreshTerritoryCounts();
+  }
+
+  private clearTrail(player: PlayerEntity): void {
+    for (const index of player.trailCells) {
+      if (this.trailOwners[index] === player.territoryKey) this.trailOwners[index] = 0;
+    }
+    player.trailCells.clear();
+    player.trail.length = 0;
+  }
+
+  private refreshTerritoryCounts(): void {
+    for (const player of this.players.values())
+      player.territoryCells = this.territory.countOwner(player.territoryKey);
+  }
+
+  private playerByTerritoryKey(key: number): PlayerEntity | undefined {
+    for (const player of this.players.values()) if (player.territoryKey === key) return player;
+    return undefined;
+  }
+
+  private findSpawn(): Vec2 {
+    let best = { x: 0, y: 0 };
+    let bestScore = -1;
+    for (let attempt = 0; attempt < 48; attempt += 1) {
+      const angle = this.random.range(-Math.PI, Math.PI);
+      const radius = Math.sqrt(this.random.next()) * (GAME.arenaRadius - 180);
+      const candidate = { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+      const index = this.territory.worldToIndex(candidate.x, candidate.y);
+      if (index < 0 || this.territory.owner(index) !== 0) continue;
+      let nearest = Number.POSITIVE_INFINITY;
+      for (const player of this.players.values()) {
+        if (!player.alive) continue;
+        nearest = Math.min(nearest, (player.x - candidate.x) ** 2 + (player.y - candidate.y) ** 2);
+      }
+      if (nearest > bestScore) {
+        bestScore = nearest;
+        best = candidate;
+      }
+      if (nearest > 260 ** 2) return candidate;
+    }
+    return best;
+  }
+
+  private allocateTerritoryKey(): number {
+    const key = this.nextTerritoryKey;
+    this.nextTerritoryKey += 1;
+    if (this.nextTerritoryKey >= 32_000) this.nextTerritoryKey = 1;
+    return key;
+  }
+}
+
+function rasterLine(start: number, end: number, size: number): number[] {
+  if (start < 0) return end >= 0 ? [end] : [];
+  let x0 = start % size;
+  let y0 = Math.floor(start / size);
+  const x1 = end % size;
+  const y1 = Math.floor(end / size);
+  const dx = Math.abs(x1 - x0);
+  const sx = x0 < x1 ? 1 : -1;
+  const dy = -Math.abs(y1 - y0);
+  const sy = y0 < y1 ? 1 : -1;
+  let error = dx + dy;
+  const result: number[] = [];
+  while (true) {
+    result.push(y0 * size + x0);
+    if (x0 === x1 && y0 === y1) break;
+    const doubled = 2 * error;
+    if (doubled >= dy) {
+      error += dy;
+      x0 += sx;
+    }
+    if (doubled <= dx) {
+      error += dx;
+      y0 += sy;
+    }
+  }
+  return result;
+}
+
+function round(value: number): number {
+  return Math.round(value * 100) / 100;
+}

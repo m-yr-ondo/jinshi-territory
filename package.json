@@ -1,0 +1,39 @@
+{
+  "name": "jinshi-territory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A multiplayer territory-capture arena built for local play and Discord Activities.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run build -w @jinshi-territory/shared && concurrently -k -n server,client -c magenta,cyan \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:client": "npm run dev -w @jinshi-territory/client",
+    "dev:server": "npm run dev -w @jinshi-territory/server",
+    "build": "npm run build -w @jinshi-territory/shared && npm run build -w @jinshi-territory/server && npm run build -w @jinshi-territory/client",
+    "test": "npm run test -w @jinshi-territory/shared && npm run test -w @jinshi-territory/server && npm run test -w @jinshi-territory/client",
+    "test:e2e": "playwright test",
+    "typecheck": "npm run build -w @jinshi-territory/shared && npm run typecheck -w @jinshi-territory/server && npm run typecheck -w @jinshi-territory/client",
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "loadtest": "npm run loadtest -w @jinshi-territory/server"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@playwright/test": "^1.58.2",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.39.2",
+    "globals": "^16.5.0",
+    "prettier": "^3.8.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1",
+    "vitest": "^4.1.10"
+  }
+}

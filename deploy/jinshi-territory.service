@@ -1,0 +1,19 @@
+[Unit]
+Description=Jinshi Territory Discord Activity
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/jinshi-territory
+EnvironmentFile=/home/ubuntu/jinshi-territory/.env
+ExecStart=/usr/bin/node /home/ubuntu/jinshi-territory/apps/server/dist/index.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

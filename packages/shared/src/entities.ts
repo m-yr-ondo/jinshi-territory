@@ -21,6 +21,7 @@ export interface PlayerEntity {
   deaths: number;
   alive: boolean;
   moving: boolean;
+  movementLockedUntil: number;
   protectedUntil: number;
   spawnedAt: number;
   respawnAt: number;
@@ -36,6 +37,7 @@ export interface PlayerEntity {
 export interface LeaderboardEntry {
   id: string;
   name: string;
+  color: number;
   percentage: number;
   kills: number;
   kind: PlayerKind;

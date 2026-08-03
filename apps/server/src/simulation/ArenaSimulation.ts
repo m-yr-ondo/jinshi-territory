@@ -11,6 +11,7 @@ import {
   type LeaderboardEntry,
   type PlayerEntity,
   type PlayerMovementMessage,
+  type PlayerSkinDefinition,
   type PlayerSnapshot,
   type Vec2
 } from '@jinshi-territory/shared';
@@ -64,12 +65,13 @@ export class ArenaSimulation {
   addHuman(id: string, options: JoinOptions, now = Date.now()): PlayerEntity {
     const existing = this.players.get(id);
     if (existing) return existing;
+    const skin = this.chooseSkin();
     const player = this.createPlayer(
       id,
       options.playerId,
       options.displayName,
       'human',
-      options.skinId ?? PLAYER_SKINS[0].id,
+      skin.id,
       now
     );
     this.players.set(id, player);
@@ -124,7 +126,7 @@ export class ArenaSimulation {
     while (bots.length < target) {
       const index = bots.length;
       const id = `bot-${index}-${Math.floor(this.random.next() * 1_000_000)}`;
-      const skin = PLAYER_SKINS[this.random.integer(0, PLAYER_SKINS.length)] ?? PLAYER_SKINS[0];
+      const skin = this.chooseSkin();
       const player = this.createPlayer(
         id,
         id,
@@ -162,6 +164,7 @@ export class ArenaSimulation {
       .map((player) => ({
         id: player.id,
         name: player.name,
+        color: player.color,
         percentage: this.percentage(player.territoryCells),
         kills: player.kills,
         kind: player.kind
@@ -184,7 +187,7 @@ export class ArenaSimulation {
       kills: player.kills,
       deaths: player.deaths,
       alive: player.alive,
-      moving: player.moving,
+      moving: player.moving && now >= player.movementLockedUntil,
       protected: now < player.protectedUntil,
       respawnAt: player.respawnAt,
       acknowledgedMovement: player.lastMovementSequence,
@@ -226,6 +229,7 @@ export class ArenaSimulation {
       deaths: 0,
       alive: true,
       moving: kind === 'bot',
+      movementLockedUntil: now + GAME.spawnMovementDelayMs,
       protectedUntil: now + GAME.spawnProtectionMs,
       spawnedAt: now,
       respawnAt: 0,
@@ -241,6 +245,13 @@ export class ArenaSimulation {
     return player;
   }
 
+  private chooseSkin(): PlayerSkinDefinition {
+    const used = new Set([...this.players.values()].map((player) => player.skinId));
+    const unused = PLAYER_SKINS.filter((skin) => !used.has(skin.id));
+    const choices = unused.length > 0 ? unused : PLAYER_SKINS;
+    return choices[this.random.integer(0, choices.length)] ?? PLAYER_SKINS[0];
+  }
+
   private respawn(player: PlayerEntity, now: number): void {
     this.clearTrail(player);
     this.territory.clearOwner(player.territoryKey);
@@ -252,6 +263,7 @@ export class ArenaSimulation {
     player.targetAngle = angle;
     player.alive = true;
     player.moving = player.kind === 'bot';
+    player.movementLockedUntil = now + GAME.spawnMovementDelayMs;
     player.drawing = false;
     player.protectedUntil = now + GAME.spawnProtectionMs;
     player.spawnedAt = now;
@@ -262,7 +274,7 @@ export class ArenaSimulation {
   }
 
   private movePlayer(player: PlayerEntity, deltaSeconds: number, now: number): void {
-    if (!player.moving) return;
+    if (!player.moving || now < player.movementLockedUntil) return;
     const previousPosition = { x: player.x, y: player.y };
     const previousIndex = this.territory.worldToIndex(player.x, player.y);
     const next = advancePlayer(player, player.targetAngle, deltaSeconds);

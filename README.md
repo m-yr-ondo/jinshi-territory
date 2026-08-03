@@ -10,7 +10,7 @@ Players leave safe territory to draw a vulnerable trail. Returning home closes t
 - Shared circular arena with 12 autonomous bots
 - Territory stealing, reliable enemy/self trail cutting, respawning and percentage scoring
 - Mouse, touch, WASD and arrow-key controls
-- Twelve original color presets
+- Twenty saturated colors assigned randomly by the server
 - Discord Embedded App authentication backend
 - Automatic arena cleanup after the last human leaves
 

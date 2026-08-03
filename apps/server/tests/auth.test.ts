@@ -1,30 +1,22 @@
 import { JWT } from '@colyseus/auth';
-import { DEFAULT_PLAYER_SKIN_ID } from '@jinshi-territory/shared';
 import { describe, expect, it } from 'vitest';
 import { discordJoinOptions, verifyDiscordActivity } from '../src/auth/DiscordIdentity.js';
 import { validateLocalIdentity } from '../src/auth/LocalIdentity.js';
 
-describe('local skin selection', () => {
-  it('accepts catalogue IDs and replaces arbitrary values with the default', () => {
+describe('local identity', () => {
+  it('accepts identity fields and discards client-provided colors', () => {
     expect(
       validateLocalIdentity({
         playerId: 'player_valid',
         displayName: 'Player',
-        skinId: 'coral'
-      }).skinId
-    ).toBe('coral');
-    expect(
-      validateLocalIdentity({
-        playerId: 'player_invalid',
-        displayName: 'Player',
-        skinId: 'https://example.com/uploaded-skin.png'
-      }).skinId
-    ).toBe(DEFAULT_PLAYER_SKIN_ID);
+        skinId: 'hot-pink'
+      })
+    ).toEqual({ playerId: 'player_valid', displayName: 'Player' });
   });
 });
 
 describe('Discord Activity identity', () => {
-  it('uses the verified Discord identity while retaining only a valid selected skin', () => {
+  it('uses the verified Discord identity and discards client-provided colors', () => {
     const auth = {
       id: '123456789012345678',
       username: 'discord-user',
@@ -38,14 +30,13 @@ describe('Discord Activity identity', () => {
         {
           playerId: 'spoofed_player',
           displayName: 'Spoofed Name',
-          skinId: 'violet'
+          skinId: 'hot-pink'
         },
         auth
       )
     ).toEqual({
       playerId: auth.id,
       displayName: auth.globalName,
-      skinId: 'violet',
       guildId: auth.guildId,
       channelId: auth.channelId
     });

@@ -2,26 +2,33 @@ export interface PlayerSkinDefinition {
   id: string;
   name: string;
   color: number;
-  accent: number;
 }
 
 export const PLAYER_SKINS = [
-  { id: 'cyan', name: 'Cyan', color: 0x55d7ff, accent: 0xd9f8ff },
-  { id: 'coral', name: 'Coral', color: 0xff5c8a, accent: 0xffd4df },
-  { id: 'lime', name: 'Lime', color: 0x8aef74, accent: 0xe4ffdd },
-  { id: 'sun', name: 'Sun', color: 0xffcf55, accent: 0xfff1bd },
-  { id: 'violet', name: 'Violet', color: 0xa77bff, accent: 0xe9dcff },
-  { id: 'ember', name: 'Ember', color: 0xff835c, accent: 0xffded3 },
-  { id: 'mint', name: 'Mint', color: 0x4de7b1, accent: 0xd1fff0 },
-  { id: 'ocean', name: 'Ocean', color: 0x5f8cff, accent: 0xd9e3ff },
-  { id: 'rose', name: 'Rose', color: 0xf06bd8, accent: 0xffdbf7 },
-  { id: 'acid', name: 'Acid', color: 0xc9ed5b, accent: 0xf4ffc9 },
-  { id: 'indigo', name: 'Indigo', color: 0x7868ff, accent: 0xddd9ff },
-  { id: 'aqua', name: 'Aqua', color: 0x33c8d7, accent: 0xd2fbff }
+  { id: 'neon-cyan', name: 'Neon Cyan', color: 0x00eaff },
+  { id: 'hot-pink', name: 'Hot Pink', color: 0xff2d95 },
+  { id: 'acid-lime', name: 'Acid Lime', color: 0x9dff00 },
+  { id: 'solar-yellow', name: 'Solar Yellow', color: 0xffe600 },
+  { id: 'electric-violet', name: 'Electric Violet', color: 0xa855ff },
+  { id: 'blaze-orange', name: 'Blaze Orange', color: 0xff5a1f },
+  { id: 'neon-mint', name: 'Neon Mint', color: 0x00ff9d },
+  { id: 'laser-blue', name: 'Laser Blue', color: 0x2979ff },
+  { id: 'shock-magenta', name: 'Shock Magenta', color: 0xff00d4 },
+  { id: 'chartreuse', name: 'Chartreuse', color: 0xc7ff00 },
+  { id: 'ultraviolet', name: 'Ultraviolet', color: 0x6c3bff },
+  { id: 'turquoise', name: 'Turquoise', color: 0x00d8c8 },
+  { id: 'scarlet', name: 'Scarlet', color: 0xff3045 },
+  { id: 'emerald', name: 'Emerald', color: 0x00d95f },
+  { id: 'orchid', name: 'Orchid', color: 0xe65cff },
+  { id: 'tangerine', name: 'Tangerine', color: 0xff8a00 },
+  { id: 'ice-blue', name: 'Ice Blue', color: 0x6be7ff },
+  { id: 'ruby', name: 'Ruby', color: 0xe8005a },
+  { id: 'electric-blue', name: 'Electric Blue', color: 0x006bff },
+  { id: 'neon-gold', name: 'Neon Gold', color: 0xffbd00 }
 ] as const satisfies readonly PlayerSkinDefinition[];
 
 export type PlayerSkinId = (typeof PLAYER_SKINS)[number]['id'];
-export const DEFAULT_PLAYER_SKIN_ID: PlayerSkinId = 'cyan';
+export const DEFAULT_PLAYER_SKIN_ID: PlayerSkinId = 'neon-cyan';
 
 export function isPlayerSkinId(value: unknown): value is PlayerSkinId {
   return typeof value === 'string' && PLAYER_SKINS.some((skin) => skin.id === value);

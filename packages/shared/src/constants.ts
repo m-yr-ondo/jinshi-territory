@@ -10,17 +10,18 @@ export const GAME = {
   arenaRadius: 1600,
   playerSpeed: 172,
   maximumTurnRate: 4.6,
-  playerRadius: 12,
-  trailWidth: 13,
+  playerRadius: 14,
+  trailWidth: 22,
   trailPointSpacing: 8,
   maximumTrailPoints: 700,
   startingTerritoryRadius: 4,
   botTarget: 12,
   botThinkIntervalMs: 170,
   respawnDelayMs: 1800,
+  spawnMovementDelayMs: 1000,
   spawnProtectionMs: 1300,
   movementRateLimit: 45,
-  leaderboardSize: 10
+  leaderboardSize: 5
 } as const;
 
 export const BOT_NAMES = [
@@ -36,9 +37,4 @@ export const BOT_NAMES = [
   'Stencil',
   'Pixel',
   'Contour'
-] as const;
-
-export const PLAYER_COLORS = [
-  0x55d7ff, 0xff5c8a, 0x8aef74, 0xffcf55, 0xa77bff, 0xff835c, 0x4de7b1, 0x5f8cff, 0xf06bd8,
-  0xc9ed5b, 0x7868ff, 0x33c8d7, 0xff6f61, 0x64d37d, 0xe59cff
 ] as const;

@@ -14,11 +14,11 @@ export class Minimap {
   render(players: PlayerSnapshot[], selfId: string, arenaRadius: number): void {
     const { context, canvas } = this;
     context.clearRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = 'rgba(5,10,25,.9)';
+    context.fillStyle = 'rgba(0,0,0,.84)';
     context.beginPath();
     context.arc(154, 154, 150, 0, Math.PI * 2);
     context.fill();
-    context.strokeStyle = 'rgba(255,100,130,.65)';
+    context.strokeStyle = 'rgba(255,255,255,.5)';
     context.lineWidth = 4;
     context.stroke();
     for (const player of players) {

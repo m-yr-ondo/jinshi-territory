@@ -32,7 +32,7 @@ export class TerritoryRenderer {
             (end - column) * cellSize + 1,
             cellSize + 1
           )
-          .fill({ color: colors.get(owner) ?? 0x94a3b8, alpha: 0.43 });
+          .fill({ color: colors.get(owner) ?? 0x94a3b8 });
         column = end;
       }
     }

@@ -34,6 +34,7 @@ export class TerritoryGame {
   private sequence = 0;
   private inputTimer?: number;
   private previousCells = 0;
+  private bestPercentage = 0;
 
   constructor(
     private readonly root: HTMLElement,
@@ -72,7 +73,7 @@ export class TerritoryGame {
   async initialize(): Promise<void> {
     await this.app.init({
       resizeTo: this.root,
-      background: 0x0c1020,
+      background: 0x000000,
       antialias: true,
       resolution: Math.min(1.5, devicePixelRatio)
     });
@@ -108,8 +109,18 @@ export class TerritoryGame {
     const percentage = self
       ? (self.territoryCells / Math.max(1, this.model.metadata.claimableCells)) * 100
       : 0;
+    this.bestPercentage = Math.max(this.bestPercentage, percentage);
     this.territoryValue.textContent = `${percentage.toFixed(1)}%`;
-    this.killsValue.textContent = String(self?.kills ?? 0);
+    this.killsValue.textContent = `×${self?.kills ?? 0}`;
+    const best = this.hud.querySelector('[data-best]') as HTMLElement;
+    const progress = this.hud.querySelector('.territory-progress-fill') as HTMLElement;
+    best.textContent = `BEST ${this.bestPercentage.toFixed(1)}%`;
+    progress.style.width = `${Math.min(100, percentage)}%`;
+    if (self) {
+      const color = `#${self.color.toString(16).padStart(6, '0')}`;
+      progress.style.backgroundColor = color;
+      progress.style.color = color;
+    }
     this.leaderboard.render(this.model.metadata.leaderboard, this.selfId);
     this.minimap.render(players, this.selfId, this.model.arenaRadius || GAME.arenaRadius);
   }
@@ -153,12 +164,16 @@ function buildHud(root: HTMLElement): HTMLElement {
   const hud = document.createElement('div');
   hud.className = 'hud';
   hud.innerHTML = `
-    <div class="stats panel">
-      <div class="stat"><span class="stat-label">Territory</span><span class="stat-value" data-territory>0.0%</span></div>
-      <div class="stat"><span class="stat-label">Cuts</span><span class="stat-value" data-kills>0</span></div>
+    <div class="stats">
+      <div class="territory-progress">
+        <div class="territory-progress-fill"></div>
+        <span class="stat-value" data-territory>0.0%</span>
+      </div>
+      <span class="best-score" data-best>BEST 0.0%</span>
+      <span class="cuts-score"><span aria-hidden="true">✂</span> <span data-kills>×0</span></span>
     </div>
     <div class="connection panel">Connecting…</div>
-    <div class="leaderboard panel"></div>
+    <div class="leaderboard"></div>
     <div class="minimap-wrap panel"><canvas id="minimap"></canvas></div>
     <div class="game-tip panel">Close loops to claim land • Cross an enemy trail to eliminate them</div>
     <button class="mute" title="Toggle audio">🔊</button>`;

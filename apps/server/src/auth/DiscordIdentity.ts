@@ -1,6 +1,6 @@
 import { JWT } from '@colyseus/auth';
 import { ServerError } from '@colyseus/core';
-import { DEFAULT_PLAYER_SKIN_ID, isPlayerSkinId, type JoinOptions } from '@jinshi-territory/shared';
+import type { JoinOptions } from '@jinshi-territory/shared';
 
 const DISCORD_API = 'https://discord.com/api/v10';
 const SNOWFLAKE = /^\d{17,20}$/;
@@ -148,15 +148,12 @@ export async function verifyDiscordActivity(
 }
 
 export function discordJoinOptions(
-  rawOptions: unknown,
+  _rawOptions: unknown,
   auth: AuthenticatedDiscordUser
 ): JoinOptions {
-  const candidate =
-    rawOptions && typeof rawOptions === 'object' ? (rawOptions as JoinOptions) : null;
   return {
     playerId: auth.id,
     displayName: auth.globalName || auth.username,
-    skinId: isPlayerSkinId(candidate?.skinId) ? candidate.skinId : DEFAULT_PLAYER_SKIN_ID,
     guildId: auth.guildId,
     channelId: auth.channelId
   };

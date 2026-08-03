@@ -15,8 +15,7 @@ const rooms = await Promise.all(
     const client = new Client(endpoint);
     const room = await client.joinOrCreate('territory', {
       playerId: `loadtest_${index}_${Date.now()}`,
-      displayName: `Load ${index + 1}`,
-      skinId: 'cyan'
+      displayName: `Load ${index + 1}`
     });
     room.onMessage(MESSAGE.worldInit, (_message: WorldInit) => undefined);
     room.onMessage(MESSAGE.worldDelta, (_message: WorldDelta) => undefined);

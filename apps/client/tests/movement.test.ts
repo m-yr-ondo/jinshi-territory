@@ -7,7 +7,7 @@ function player(x = 0): PlayerSnapshot {
     id: 'player',
     name: 'Player',
     kind: 'human',
-    skinId: 'cyan',
+    skinId: 'neon-cyan',
     color: 0x55d7ff,
     territoryKey: 1,
     x,

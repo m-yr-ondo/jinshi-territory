@@ -6,11 +6,7 @@ function create(seed = 12) {
   const onDeath = vi.fn();
   const simulation = new ArenaSimulation({ seed, onDeath });
   simulation.start(1000);
-  simulation.addHuman(
-    'human',
-    { playerId: 'human_001', displayName: 'Human', skinId: 'coral' },
-    1000
-  );
+  simulation.addHuman('human', { playerId: 'human_001', displayName: 'Human' }, 1000);
   return { simulation, onDeath };
 }
 
@@ -30,12 +26,13 @@ describe('territory simulation', () => {
     ).toBe(false);
   });
 
-  it('creates starting territory and preserves selected color', () => {
+  it('creates starting territory and assigns a server-selected color', () => {
     const { simulation } = create(20);
     const player = simulation.players.get('human')!;
     expect(player.territoryCells).toBeGreaterThan(30);
-    expect(player.skinId).toBe('coral');
-    expect(player.color).toBe(PLAYER_SKINS.find((skin) => skin.id === 'coral')?.color);
+    expect(
+      PLAYER_SKINS.some((skin) => skin.id === player.skinId && skin.color === player.color)
+    ).toBe(true);
   });
 
   it('eliminates a player at the circular boundary and respawns them', () => {
@@ -58,11 +55,53 @@ describe('territory simulation', () => {
   it('maintains the configured bot population', () => {
     const { simulation } = create(40);
     expect(simulation.botCount).toBe(GAME.botTarget);
+    expect(new Set([...simulation.players.values()].map((player) => player.skinId)).size).toBe(
+      simulation.players.size
+    );
+    expect(simulation.leaderboard()).toHaveLength(5);
+    expect(simulation.leaderboard().every((entry) => Number.isInteger(entry.color))).toBe(true);
     expect(
       [...simulation.players.values()]
         .filter((player) => player.kind === 'bot')
         .every((player) => PLAYER_SKINS.some((skin) => skin.id === player.skinId))
     ).toBe(true);
+  });
+
+  it('holds a respawn still for one second even when input is already queued', () => {
+    expect(GAME.spawnMovementDelayMs).toBe(1000);
+    const simulation = new ArenaSimulation({ seed: 50, botTarget: 0 });
+    simulation.start(1000);
+    const player = simulation.addHuman(
+      'delayed',
+      { playerId: 'delayed_001', displayName: 'Delayed' },
+      1000
+    );
+    player.x = GAME.arenaRadius - 1;
+    player.y = 0;
+    player.angle = 0;
+    player.targetAngle = 0;
+    player.moving = true;
+    simulation.step(1 / GAME.tickRate, 2000);
+
+    const respawnedAt = 2000 + GAME.respawnDelayMs;
+    simulation.step(1 / GAME.tickRate, respawnedAt);
+    const spawn = { x: player.x, y: player.y };
+    expect(
+      simulation.applyMovement(
+        player.id,
+        { sequence: 1, angle: 0, clientTime: respawnedAt },
+        respawnedAt
+      )
+    ).toBe(true);
+
+    simulation.step(1 / GAME.tickRate, respawnedAt + GAME.spawnMovementDelayMs - 1);
+    expect({ x: player.x, y: player.y }).toEqual(spawn);
+    expect(simulation.playerSnapshots(respawnedAt + GAME.spawnMovementDelayMs - 1)[0]?.moving).toBe(
+      false
+    );
+
+    simulation.step(1 / GAME.tickRate, respawnedAt + GAME.spawnMovementDelayMs);
+    expect({ x: player.x, y: player.y }).not.toEqual(spawn);
   });
 
   it('uses a 60% larger arena and keeps humans centered until fresh input', () => {

@@ -9,7 +9,7 @@ Every player begins inside a small circular territory and moves continuously.
 - Crossing your own exposed trail also eliminates you.
 - Crossing the circular arena boundary eliminates the player.
 - Eliminated players lose their territory and respawn after a short delay.
-- Human players remain centered and stationary after joining or respawning until they provide fresh steering input.
-- The leaderboard ranks active players by percentage of the claimable arena, then cuts.
+- Human players remain centered and stationary after joining or respawning until they provide fresh steering input. Every spawn also has a server-enforced one-second movement pause.
+- The leaderboard shows the top five active players, ranked by percentage of the claimable arena and then cuts.
 
 The arena starts when the first human joins, includes twelve bots, and is disposed when the last human leaves.

@@ -3,7 +3,6 @@ import type { LeaderboardEntry, PlayerKind, Vec2 } from './entities.js';
 export interface JoinOptions {
   playerId: string;
   displayName: string;
-  skinId?: string;
   guildId?: string;
   channelId?: string;
 }

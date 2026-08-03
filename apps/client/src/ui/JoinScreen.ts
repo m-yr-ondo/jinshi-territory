@@ -1,12 +1,4 @@
-import {
-  DEFAULT_PLAYER_SKIN_ID,
-  PLAYER_SKINS,
-  isPlayerSkinId,
-  type JoinOptions,
-  type PlayerSkinDefinition
-} from '@jinshi-territory/shared';
-
-const SKIN_STORAGE_KEY = 'jinshi-territory-skin';
+import type { JoinOptions } from '@jinshi-territory/shared';
 
 export interface JoinIdentity {
   playerId: string;
@@ -21,8 +13,6 @@ export class JoinScreen {
   private readonly nameInput = document.createElement('input');
   private readonly button = document.createElement('button');
   private readonly error = document.createElement('p');
-  private readonly choices = document.createElement('div');
-  private selectedSkinId = storedSkinId();
 
   constructor(
     private readonly onJoin: (options: JoinOptions) => Promise<void>,
@@ -38,8 +28,6 @@ export class JoinScreen {
     this.button.className = 'primary';
     this.button.textContent = 'Claim the arena';
     this.error.className = 'join-error';
-    this.choices.className = 'skin-grid';
-    this.renderChoices();
 
     const card = document.createElement('div');
     card.className = 'join-card';
@@ -52,10 +40,7 @@ export class JoinScreen {
     label.htmlFor = this.nameInput.id;
     label.innerHTML = '<span>Display name</span>';
     label.append(this.nameInput);
-    const skinLabel = document.createElement('p');
-    skinLabel.className = 'skin-label';
-    skinLabel.textContent = 'Choose your color';
-    card.append(label, skinLabel, this.choices, this.button, this.error);
+    card.append(label, this.button, this.error);
 
     const hint = document.createElement('p');
     hint.className = 'controls-hint';
@@ -65,27 +50,6 @@ export class JoinScreen {
     this.nameInput.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') void this.submit();
     });
-  }
-
-  private renderChoices(): void {
-    this.choices.replaceChildren(...PLAYER_SKINS.map((skin) => this.skinButton(skin)));
-  }
-
-  private skinButton(skin: PlayerSkinDefinition): HTMLButtonElement {
-    const choice = document.createElement('button');
-    choice.type = 'button';
-    choice.className = `skin-choice${skin.id === this.selectedSkinId ? ' selected' : ''}`;
-    choice.title = skin.name;
-    choice.setAttribute('aria-label', `Choose ${skin.name}`);
-    choice.setAttribute('aria-pressed', String(skin.id === this.selectedSkinId));
-    choice.style.setProperty('--skin-color', colorHex(skin.color));
-    choice.style.setProperty('--skin-accent', colorHex(skin.accent));
-    choice.innerHTML = '<span class="skin-cube"><i></i><i></i></span>';
-    choice.addEventListener('click', () => {
-      this.selectedSkinId = skin.id;
-      this.renderChoices();
-    });
-    return choice;
   }
 
   private async submit(): Promise<void> {
@@ -99,12 +63,10 @@ export class JoinScreen {
     this.error.textContent = '';
     const playerId = this.identity?.playerId ?? getPlayerId();
     if (!this.identity?.locked) localStorage.setItem('jinshi-territory-name', displayName);
-    localStorage.setItem(SKIN_STORAGE_KEY, this.selectedSkinId);
     try {
       await this.onJoin({
         playerId,
         displayName,
-        skinId: this.selectedSkinId,
         ...(this.identity?.guildId ? { guildId: this.identity.guildId } : {}),
         ...(this.identity?.channelId ? { channelId: this.identity.channelId } : {})
       });
@@ -115,15 +77,6 @@ export class JoinScreen {
       this.button.textContent = 'Claim the arena';
     }
   }
-}
-
-function storedSkinId(): string {
-  const stored = localStorage.getItem(SKIN_STORAGE_KEY);
-  return isPlayerSkinId(stored) ? stored : DEFAULT_PLAYER_SKIN_ID;
-}
-
-function colorHex(color: number): string {
-  return `#${color.toString(16).padStart(6, '0')}`;
 }
 
 function getPlayerId(): string {

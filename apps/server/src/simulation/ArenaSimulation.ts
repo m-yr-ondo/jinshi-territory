@@ -98,6 +98,7 @@ export class ArenaSimulation {
     player.lastMovementSequence = movement.sequence;
     player.lastMovementAt = now;
     player.targetAngle = normalizeAngle(movement.angle);
+    player.moving = true;
     return true;
   }
 
@@ -183,6 +184,7 @@ export class ArenaSimulation {
       kills: player.kills,
       deaths: player.deaths,
       alive: player.alive,
+      moving: player.moving,
       protected: now < player.protectedUntil,
       respawnAt: player.respawnAt,
       acknowledgedMovement: player.lastMovementSequence,
@@ -223,6 +225,7 @@ export class ArenaSimulation {
       kills: 0,
       deaths: 0,
       alive: true,
+      moving: kind === 'bot',
       protectedUntil: now + GAME.spawnProtectionMs,
       spawnedAt: now,
       respawnAt: 0,
@@ -248,6 +251,7 @@ export class ArenaSimulation {
     player.angle = angle;
     player.targetAngle = angle;
     player.alive = true;
+    player.moving = player.kind === 'bot';
     player.drawing = false;
     player.protectedUntil = now + GAME.spawnProtectionMs;
     player.spawnedAt = now;
@@ -258,6 +262,8 @@ export class ArenaSimulation {
   }
 
   private movePlayer(player: PlayerEntity, deltaSeconds: number, now: number): void {
+    if (!player.moving) return;
+    const previousPosition = { x: player.x, y: player.y };
     const previousIndex = this.territory.worldToIndex(player.x, player.y);
     const next = advancePlayer(player, player.targetAngle, deltaSeconds);
     player.x = next.x;
@@ -272,6 +278,8 @@ export class ArenaSimulation {
       this.killPlayer(player, { reason: 'boundary' }, now);
       return;
     }
+
+    if (!this.resolveTrailCuts(player, previousPosition, next, now)) return;
 
     const ownsCurrent = this.territory.owner(currentIndex) === player.territoryKey;
     if (!player.drawing && !ownsCurrent) {
@@ -306,6 +314,38 @@ export class ArenaSimulation {
     }
   }
 
+  /**
+   * Tests the complete swept head path against visible trail segments. The grid
+   * remains the ownership source of truth, while this geometric pass prevents
+   * fast or diagonal cuts from slipping between adjacent cells.
+   */
+  private resolveTrailCuts(attacker: PlayerEntity, from: Vec2, to: Vec2, now: number): boolean {
+    const hitDistance = GAME.playerRadius + GAME.trailWidth / 2;
+    const hitDistanceSquared = hitDistance * hitDistance;
+
+    for (const victim of this.players.values()) {
+      if (!victim.alive || !victim.drawing || victim.trail.length === 0) continue;
+      const path = [...victim.trail, { x: victim.x, y: victim.y }];
+      for (let index = 0; index < path.length - 1; index += 1) {
+        // The newest portion of a player's own trail is attached to its head;
+        // ignoring it avoids treating ordinary forward motion as self-contact.
+        if (victim.id === attacker.id && index >= path.length - 5) continue;
+        const start = path[index];
+        const end = path[index + 1];
+        if (!start || !end) continue;
+        if (segmentDistanceSquared(from, to, start, end) > hitDistanceSquared) continue;
+
+        if (victim.id === attacker.id) {
+          this.killPlayer(attacker, { reason: 'trail' }, now);
+          return false;
+        }
+        this.killPlayer(victim, { reason: 'trail', killerId: attacker.id }, now);
+        break;
+      }
+    }
+    return attacker.alive;
+  }
+
   private recordTrailPoint(player: PlayerEntity): void {
     const last = player.trail.at(-1);
     if (last && (player.x - last.x) ** 2 + (player.y - last.y) ** 2 < GAME.trailPointSpacing ** 2)
@@ -322,6 +362,7 @@ export class ArenaSimulation {
   ): void {
     if (!player.alive) return;
     player.alive = false;
+    player.moving = false;
     player.deaths += 1;
     player.respawnAt = now + GAME.respawnDelayMs;
     this.clearTrail(player);
@@ -359,14 +400,16 @@ export class ArenaSimulation {
   }
 
   private findSpawn(): Vec2 {
-    let best = { x: 0, y: 0 };
+    const centerIndex = this.territory.worldToIndex(0, 0);
+    let best = centerIndex >= 0 ? this.territory.center(centerIndex) : { x: 0, y: 0 };
     let bestScore = -1;
     for (let attempt = 0; attempt < 48; attempt += 1) {
       const angle = this.random.range(-Math.PI, Math.PI);
       const radius = Math.sqrt(this.random.next()) * (GAME.arenaRadius - 180);
-      const candidate = { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
-      const index = this.territory.worldToIndex(candidate.x, candidate.y);
+      const unsnapped = { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+      const index = this.territory.worldToIndex(unsnapped.x, unsnapped.y);
       if (index < 0 || this.territory.owner(index) !== 0) continue;
+      const candidate = this.territory.center(index);
       let nearest = Number.POSITIVE_INFINITY;
       for (const player of this.players.values()) {
         if (!player.alive) continue;
@@ -415,6 +458,44 @@ function rasterLine(start: number, end: number, size: number): number[] {
     }
   }
   return result;
+}
+
+function segmentDistanceSquared(a: Vec2, b: Vec2, c: Vec2, d: Vec2): number {
+  if (segmentsIntersect(a, b, c, d)) return 0;
+  return Math.min(
+    pointSegmentDistanceSquared(a, c, d),
+    pointSegmentDistanceSquared(b, c, d),
+    pointSegmentDistanceSquared(c, a, b),
+    pointSegmentDistanceSquared(d, a, b)
+  );
+}
+
+function segmentsIntersect(a: Vec2, b: Vec2, c: Vec2, d: Vec2): boolean {
+  const abX = b.x - a.x;
+  const abY = b.y - a.y;
+  const cdX = d.x - c.x;
+  const cdY = d.y - c.y;
+  const denominator = abX * cdY - abY * cdX;
+  if (Math.abs(denominator) < 1e-8) return false;
+  const acX = c.x - a.x;
+  const acY = c.y - a.y;
+  const first = (acX * cdY - acY * cdX) / denominator;
+  const second = (acX * abY - acY * abX) / denominator;
+  return first >= 0 && first <= 1 && second >= 0 && second <= 1;
+}
+
+function pointSegmentDistanceSquared(point: Vec2, start: Vec2, end: Vec2): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) return (point.x - start.x) ** 2 + (point.y - start.y) ** 2;
+  const ratio = Math.max(
+    0,
+    Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared)
+  );
+  const nearestX = start.x + dx * ratio;
+  const nearestY = start.y + dy * ratio;
+  return (point.x - nearestX) ** 2 + (point.y - nearestY) ** 2;
 }
 
 function round(value: number): number {

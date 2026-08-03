@@ -16,6 +16,7 @@ function player(x = 0): PlayerSnapshot {
     kills: 0,
     deaths: 0,
     alive: true,
+    moving: true,
     protected: false,
     respawnAt: 0,
     acknowledgedMovement: 0,
@@ -37,5 +38,13 @@ describe('buffered player rendering', () => {
     const buffered = new BufferedPlayer(player(0), 1000);
     const rendered = buffered.render(1000, 0.1, true, 0);
     expect(rendered.x).toBeCloseTo(GAME.playerSpeed * 0.05);
+  });
+
+  it('does not predict movement before the server enables a fresh spawn', () => {
+    const buffered = new BufferedPlayer({ ...player(0), moving: false }, 1000);
+    const rendered = buffered.render(1000, 0.1, true, 0);
+    expect(rendered.x).toBe(0);
+    buffered.markDead(3000);
+    expect(buffered.render(1100, 0.1, true, 0).alive).toBe(false);
   });
 });

@@ -27,6 +27,7 @@ export interface PlayerSnapshot {
   kills: number;
   deaths: number;
   alive: boolean;
+  moving: boolean;
   protected: boolean;
   respawnAt: number;
   acknowledgedMovement: number;

@@ -8,7 +8,7 @@ Players leave safe territory to draw a vulnerable trail. Returning home closes t
 
 - Server-authoritative multiplayer movement and captures
 - Shared circular arena with 12 autonomous bots
-- Territory stealing, trail cutting, respawning and percentage scoring
+- Territory stealing, reliable enemy/self trail cutting, respawning and percentage scoring
 - Mouse, touch, WASD and arrow-key controls
 - Twelve original color presets
 - Discord Embedded App authentication backend

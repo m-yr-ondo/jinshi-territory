@@ -1,4 +1,5 @@
 import type {
+  DeathMessage,
   PlayerMovementMessage,
   PlayerSnapshot,
   WorldDelta,
@@ -57,6 +58,10 @@ export class WorldModel {
     return [...this.players.entries()].map(([id, player]) =>
       player.render(serverNow, deltaSeconds, id === this.selfId, targetAngle)
     );
+  }
+
+  markDead(playerId: string, message: DeathMessage): void {
+    this.players.get(playerId)?.markDead(message.respawnAt);
   }
 
   private setTerritory(revision: number, encoded: string): void {

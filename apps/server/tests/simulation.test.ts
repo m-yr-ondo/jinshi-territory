@@ -45,6 +45,7 @@ describe('territory simulation', () => {
     player.y = 0;
     player.angle = 0;
     player.targetAngle = 0;
+    player.moving = true;
     simulation.step(1 / GAME.tickRate, 2000);
     expect(player.alive).toBe(false);
     expect(player.territoryCells).toBe(0);
@@ -62,5 +63,93 @@ describe('territory simulation', () => {
         .filter((player) => player.kind === 'bot')
         .every((player) => PLAYER_SKINS.some((skin) => skin.id === player.skinId))
     ).toBe(true);
+  });
+
+  it('uses a 60% larger arena and keeps humans centered until fresh input', () => {
+    expect(GAME.arenaRadius).toBe(1600);
+    expect(GAME.gridSize).toBe(208);
+    const simulation = new ArenaSimulation({ seed: 60, botTarget: 0 });
+    simulation.start(1000);
+    const player = simulation.addHuman(
+      'centered',
+      { playerId: 'centered_001', displayName: 'Centered' },
+      1000
+    );
+    const spawn = { x: player.x, y: player.y };
+    const spawnCell = simulation.territory.worldToIndex(player.x, player.y);
+    expect(simulation.territory.center(spawnCell)).toEqual(spawn);
+    expect(player.moving).toBe(false);
+
+    for (let tick = 0; tick < 30; tick += 1)
+      simulation.step(1 / GAME.tickRate, 1100 + tick * (1000 / GAME.tickRate));
+    expect({ x: player.x, y: player.y }).toEqual(spawn);
+
+    expect(
+      simulation.applyMovement(player.id, { sequence: 1, angle: 0, clientTime: 2200 }, 2200)
+    ).toBe(true);
+    simulation.step(1 / GAME.tickRate, 2234);
+    expect(player.x).not.toBe(spawn.x);
+  });
+
+  it('kills an enemy immediately when their exposed trail is crossed', () => {
+    const simulation = new ArenaSimulation({ seed: 70, botTarget: 0 });
+    simulation.start(1000);
+    const attacker = simulation.addHuman(
+      'attacker',
+      { playerId: 'attacker_001', displayName: 'Attacker' },
+      1000
+    );
+    const victim = simulation.addHuman(
+      'victim',
+      { playerId: 'victim_001', displayName: 'Victim' },
+      1000
+    );
+    attacker.x = -3;
+    attacker.y = 0;
+    attacker.angle = 0;
+    attacker.targetAngle = 0;
+    attacker.moving = true;
+    victim.x = 0;
+    victim.y = 30;
+    victim.moving = false;
+    victim.drawing = true;
+    victim.trail = [
+      { x: 0, y: -30 },
+      { x: 0, y: 30 }
+    ];
+
+    simulation.step(1 / GAME.tickRate, 2000);
+    expect(victim.alive).toBe(false);
+    expect(attacker.alive).toBe(true);
+    expect(attacker.kills).toBe(1);
+  });
+
+  it('kills a player who crosses an older segment of their own exposed trail', () => {
+    const simulation = new ArenaSimulation({ seed: 80, botTarget: 0 });
+    simulation.start(1000);
+    const player = simulation.addHuman(
+      'self-cutter',
+      { playerId: 'self_cutter_001', displayName: 'Self Cutter' },
+      1000
+    );
+    player.x = -3;
+    player.y = 0;
+    player.angle = 0;
+    player.targetAngle = 0;
+    player.moving = true;
+    player.drawing = true;
+    player.trail = [
+      { x: 0, y: -30 },
+      { x: 0, y: 30 },
+      { x: 40, y: 30 },
+      { x: 40, y: 50 },
+      { x: -40, y: 50 },
+      { x: -40, y: 0 },
+      { x: -3, y: 0 }
+    ];
+
+    simulation.step(1 / GAME.tickRate, 2000);
+    expect(player.alive).toBe(false);
+    expect(player.deaths).toBe(1);
   });
 });

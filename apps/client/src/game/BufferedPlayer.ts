@@ -43,7 +43,8 @@ export class BufferedPlayer {
     targetAngle?: number
   ): PlayerSnapshot {
     if (local) {
-      if (!this.current.snapshot.alive) return clone(this.current.snapshot);
+      if (!this.current.snapshot.alive || !this.current.snapshot.moving)
+        return clone(this.current.snapshot);
       const moved = advancePlayer(
         this.predicted,
         targetAngle ?? this.predicted.angle,
@@ -63,6 +64,21 @@ export class BufferedPlayer {
       y: before.y + (after.y - before.y) * ratio,
       angle: interpolateAngle(before.angle, after.angle, ratio)
     };
+  }
+
+  markDead(respawnAt: number): void {
+    const dead = {
+      ...this.current.snapshot,
+      alive: false,
+      moving: false,
+      drawing: false,
+      respawnAt,
+      territoryCells: 0,
+      trail: []
+    };
+    this.previous = { snapshot: dead, time: this.current.time };
+    this.current = { snapshot: dead, time: this.current.time };
+    this.predicted = clone(dead);
   }
 }
 

@@ -20,6 +20,7 @@ export interface PlayerEntity {
   kills: number;
   deaths: number;
   alive: boolean;
+  moving: boolean;
   protectedUntil: number;
   spawnedAt: number;
   respawnAt: number;

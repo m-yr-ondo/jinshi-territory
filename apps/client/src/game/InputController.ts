@@ -1,5 +1,6 @@
 export class InputController {
   targetAngle = 0;
+  hasInput = false;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     window.addEventListener('pointermove', this.onPointer);
@@ -14,12 +15,17 @@ export class InputController {
     window.removeEventListener('keydown', this.onKeyDown);
   }
 
+  reset(): void {
+    this.hasInput = false;
+  }
+
   private readonly onPointer = (event: PointerEvent) => {
     const bounds = this.canvas.getBoundingClientRect();
     this.targetAngle = Math.atan2(
       event.clientY - bounds.top - bounds.height / 2,
       event.clientX - bounds.left - bounds.width / 2
     );
+    this.hasInput = true;
   };
 
   private readonly onKeyDown = (event: KeyboardEvent) => {
@@ -37,5 +43,6 @@ export class InputController {
     if (angle === undefined) return;
     event.preventDefault();
     this.targetAngle = angle;
+    this.hasInput = true;
   };
 }

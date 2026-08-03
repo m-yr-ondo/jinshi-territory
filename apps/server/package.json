@@ -1,6 +1,6 @@
 {
   "name": "@jinshi-territory/server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -16,7 +16,7 @@
     "@colyseus/core": "^0.17.46",
     "@colyseus/sdk": "^0.17.43",
     "@colyseus/ws-transport": "^0.17.13",
-    "@jinshi-territory/shared": "0.1.0",
+    "@jinshi-territory/shared": "0.2.0",
     "cors": "^2.8.6",
     "dotenv": "^17.2.4",
     "express": "^5.2.1"

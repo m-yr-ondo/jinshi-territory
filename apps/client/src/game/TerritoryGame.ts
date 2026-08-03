@@ -88,6 +88,7 @@ export class TerritoryGame {
     this.audio.unlock();
     this.connection.textContent = 'Connecting…';
     await this.network.join(options);
+    this.input?.reset();
     this.hud.classList.add('visible');
     this.connection.textContent = '● Connected';
     this.connection.classList.remove('bad');
@@ -95,7 +96,7 @@ export class TerritoryGame {
   }
 
   private sendMovement(): void {
-    if (!this.input || !this.selfId) return;
+    if (!this.input?.hasInput || !this.selfId) return;
     this.network.sendMovement(this.model.movement(++this.sequence, this.input.targetAngle));
   }
 
@@ -114,6 +115,8 @@ export class TerritoryGame {
   }
 
   private onDeath(message: DeathMessage): void {
+    this.model.markDead(this.selfId, message);
+    this.input?.reset();
     this.audio.playDeath();
     this.deathScreen.show(message);
   }

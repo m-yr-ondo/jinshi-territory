@@ -2,6 +2,11 @@ import { GAME, type Vec2 } from '@jinshi-territory/shared';
 
 const OUTSIDE = -1;
 
+interface StartingCellCandidate {
+  index: number;
+  distanceSquared: number;
+}
+
 export class TerritoryGrid {
   readonly size = GAME.gridSize;
   readonly cellSize = GAME.cellSize;
@@ -50,33 +55,33 @@ export class TerritoryGrid {
     return index < 0 || index >= this.cells.length ? OUTSIDE : (this.cells[index] ?? OUTSIDE);
   }
 
-  createStartingTerritory(key: number, position: Vec2): number {
-    const center = this.worldToIndex(position.x, position.y);
-    if (center < 0) return 0;
-    const centerColumn = center % this.size;
-    const centerRow = Math.floor(center / this.size);
+  canCreateStartingTerritory(
+    position: Vec2,
+    targetCells: number = GAME.startingTerritoryCells
+  ): boolean {
+    const footprint = this.startingTerritoryFootprint(position, targetCells);
+    return (
+      footprint.length === Math.max(1, Math.floor(targetCells)) &&
+      footprint.every((index) => this.cells[index] === 0)
+    );
+  }
+
+  createStartingTerritory(
+    key: number,
+    position: Vec2,
+    targetCells: number = GAME.startingTerritoryCells
+  ): number {
+    const footprint = this.startingTerritoryFootprint(position, targetCells);
     let claimed = 0;
-    for (
-      let row = centerRow - GAME.startingTerritoryRadius;
-      row <= centerRow + GAME.startingTerritoryRadius;
-      row += 1
-    ) {
-      for (
-        let column = centerColumn - GAME.startingTerritoryRadius;
-        column <= centerColumn + GAME.startingTerritoryRadius;
-        column += 1
-      ) {
-        if (row < 0 || column < 0 || row >= this.size || column >= this.size) continue;
-        const dx = column - centerColumn;
-        const dy = row - centerRow;
-        if (dx * dx + dy * dy > (GAME.startingTerritoryRadius + 0.35) ** 2) continue;
-        const index = row * this.size + column;
-        if (this.cells[index] === OUTSIDE) continue;
-        this.cells[index] = key;
-        claimed += 1;
-      }
+
+    for (const index of footprint) {
+      if (this.cells[index] !== 0 && this.cells[index] !== key) continue;
+      if (this.cells[index] === key) continue;
+      this.cells[index] = key;
+      claimed += 1;
     }
-    this.revision += 1;
+
+    if (claimed > 0) this.revision += 1;
     return claimed;
   }
 
@@ -175,6 +180,38 @@ export class TerritoryGrid {
     for (let index = 0; index < this.cells.length; index += 1)
       encoded[index] = this.cells[index] === OUTSIDE ? 65_535 : (this.cells[index] ?? 0);
     return Buffer.from(encoded.buffer).toString('base64');
+  }
+
+  private startingTerritoryFootprint(position: Vec2, targetCells: number): number[] {
+    const center = this.worldToIndex(position.x, position.y);
+    if (center < 0) return [];
+
+    const requested = Math.max(1, Math.floor(targetCells));
+    const centerColumn = center % this.size;
+    const centerRow = Math.floor(center / this.size);
+    const searchRadius = Math.ceil(Math.sqrt(requested / Math.PI)) + 3;
+    const candidates: StartingCellCandidate[] = [];
+
+    for (let row = centerRow - searchRadius; row <= centerRow + searchRadius; row += 1) {
+      for (
+        let column = centerColumn - searchRadius;
+        column <= centerColumn + searchRadius;
+        column += 1
+      ) {
+        if (row < 0 || column < 0 || row >= this.size || column >= this.size) continue;
+        const index = row * this.size + column;
+        if (this.cells[index] === OUTSIDE) continue;
+        const dx = column - centerColumn;
+        const dy = row - centerRow;
+        candidates.push({ index, distanceSquared: dx * dx + dy * dy });
+      }
+    }
+
+    candidates.sort(
+      (first, second) =>
+        first.distanceSquared - second.distanceSquared || first.index - second.index
+    );
+    return candidates.slice(0, requested).map((candidate) => candidate.index);
   }
 
   private neighborIsOutside(index: number): boolean {

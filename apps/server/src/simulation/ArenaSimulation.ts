@@ -25,6 +25,13 @@ interface SimulationOptions {
   onDeath?: (playerId: string, message: DeathMessage) => void;
 }
 
+const ESTABLISHED_BOT_STARTING_CELLS: Readonly<Record<string, number>> = {
+  Atlas: GAME.startingTerritoryCells * 2,
+  Canvas: GAME.startingTerritoryCells * 3,
+  Mosaic: GAME.startingTerritoryCells * 4,
+  Pixel: GAME.startingTerritoryCells * 5
+};
+
 export class ArenaSimulation {
   readonly players = new Map<string, PlayerEntity>();
   readonly territory = new TerritoryGrid();
@@ -210,7 +217,8 @@ export class ArenaSimulation {
     now: number
   ): PlayerEntity {
     const skin = playerSkin(skinId);
-    const spawn = this.findSpawn();
+    const startingTerritoryCells = this.initialStartingTerritoryCells(name, kind);
+    const spawn = this.findSpawn(startingTerritoryCells);
     const territoryKey = this.allocateTerritoryKey();
     const angle = this.random.range(-Math.PI, Math.PI);
     const player: PlayerEntity = {
@@ -241,7 +249,11 @@ export class ArenaSimulation {
       trailCells: new Set<number>(),
       lastTrailCell: this.territory.worldToIndex(spawn.x, spawn.y)
     };
-    player.territoryCells = this.territory.createStartingTerritory(territoryKey, spawn);
+    player.territoryCells = this.territory.createStartingTerritory(
+      territoryKey,
+      spawn,
+      startingTerritoryCells
+    );
     return player;
   }
 
@@ -255,7 +267,7 @@ export class ArenaSimulation {
   private respawn(player: PlayerEntity, now: number): void {
     this.clearTrail(player);
     this.territory.clearOwner(player.territoryKey);
-    const spawn = this.findSpawn();
+    const spawn = this.findSpawn(GAME.startingTerritoryCells);
     const angle = this.random.range(-Math.PI, Math.PI);
     player.x = spawn.x;
     player.y = spawn.y;
@@ -269,7 +281,11 @@ export class ArenaSimulation {
     player.spawnedAt = now;
     player.respawnAt = 0;
     player.lastTrailCell = this.territory.worldToIndex(spawn.x, spawn.y);
-    player.territoryCells = this.territory.createStartingTerritory(player.territoryKey, spawn);
+    player.territoryCells = this.territory.createStartingTerritory(
+      player.territoryKey,
+      spawn,
+      GAME.startingTerritoryCells
+    );
     this.refreshTerritoryCounts();
   }
 
@@ -411,28 +427,52 @@ export class ArenaSimulation {
     return undefined;
   }
 
-  private findSpawn(): Vec2 {
+  private initialStartingTerritoryCells(name: string, kind: 'human' | 'bot'): number {
+    if (kind !== 'bot') return GAME.startingTerritoryCells;
+    return ESTABLISHED_BOT_STARTING_CELLS[name] ?? GAME.startingTerritoryCells;
+  }
+
+  private findSpawn(startingTerritoryCells: number = GAME.startingTerritoryCells): Vec2 {
     const centerIndex = this.territory.worldToIndex(0, 0);
     let best = centerIndex >= 0 ? this.territory.center(centerIndex) : { x: 0, y: 0 };
-    let bestScore = -1;
-    for (let attempt = 0; attempt < 48; attempt += 1) {
+    let bestClearance = Number.NEGATIVE_INFINITY;
+    const requestedRadius = startingTerritoryWorldRadius(startingTerritoryCells);
+    const maximumSpawnRadius = Math.max(
+      0,
+      GAME.arenaRadius - requestedRadius - GAME.spawnTerritoryBuffer
+    );
+
+    for (let attempt = 0; attempt < 128; attempt += 1) {
       const angle = this.random.range(-Math.PI, Math.PI);
-      const radius = Math.sqrt(this.random.next()) * (GAME.arenaRadius - 180);
+      const radius = Math.sqrt(this.random.next()) * maximumSpawnRadius;
       const unsnapped = { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
       const index = this.territory.worldToIndex(unsnapped.x, unsnapped.y);
       if (index < 0 || this.territory.owner(index) !== 0) continue;
       const candidate = this.territory.center(index);
-      let nearest = Number.POSITIVE_INFINITY;
+      if (!this.territory.canCreateStartingTerritory(candidate, startingTerritoryCells)) continue;
+
+      let clearance = Number.POSITIVE_INFINITY;
       for (const player of this.players.values()) {
         if (!player.alive) continue;
-        nearest = Math.min(nearest, (player.x - candidate.x) ** 2 + (player.y - candidate.y) ** 2);
+        const existingRadius = startingTerritoryWorldRadius(
+          Math.min(
+            GAME.startingTerritoryCells * 5,
+            Math.max(GAME.startingTerritoryCells, player.territoryCells)
+          )
+        );
+        const requiredDistance =
+          requestedRadius + existingRadius + GAME.spawnTerritoryBuffer;
+        const actualDistance = Math.hypot(player.x - candidate.x, player.y - candidate.y);
+        clearance = Math.min(clearance, actualDistance - requiredDistance);
       }
-      if (nearest > bestScore) {
-        bestScore = nearest;
+
+      if (clearance > bestClearance) {
+        bestClearance = clearance;
         best = candidate;
       }
-      if (nearest > 260 ** 2) return candidate;
+      if (clearance >= 0) return candidate;
     }
+
     return best;
   }
 
@@ -442,6 +482,10 @@ export class ArenaSimulation {
     if (this.nextTerritoryKey >= 32_000) this.nextTerritoryKey = 1;
     return key;
   }
+}
+
+function startingTerritoryWorldRadius(cells: number): number {
+  return (Math.ceil(Math.sqrt(Math.max(1, cells) / Math.PI)) + 1) * GAME.cellSize;
 }
 
 function rasterLine(start: number, end: number, size: number): number[] {

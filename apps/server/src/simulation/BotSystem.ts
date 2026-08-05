@@ -81,6 +81,10 @@ const CUTTERS = new Set(['Atlas', 'Vector', 'Indigo', 'Contour']);
 const EXPANDERS = new Set(['Canvas', 'Mosaic', 'Inkwell', 'Stencil']);
 const SURVIVORS = new Set(['Patch', 'Doodle']);
 
+const MAP_LINEAR_SCALE = GAME.arenaRadius / 1600;
+const mapDistance = (value: number): number => value * MAP_LINEAR_SCALE;
+const mapCells = (value: number): number => Math.max(1, Math.round(value * MAP_LINEAR_SCALE));
+
 const PROFILES: Record<BotRole, BotProfile> = {
   cutter: {
     role: 'cutter',
@@ -93,9 +97,9 @@ const PROFILES: Record<BotRole, BotProfile> = {
     aimError: 0.035,
     safetyMarginSeconds: 0.22,
     huntRadius: 570,
-    loopDepth: [170, 330],
-    loopWidth: [150, 310],
-    trailRisk: [20, 43]
+    loopDepth: [mapDistance(170), mapDistance(330)],
+    loopWidth: [mapDistance(150), mapDistance(310)],
+    trailRisk: [mapCells(20), mapCells(43)]
   },
   expander: {
     role: 'expander',
@@ -108,9 +112,9 @@ const PROFILES: Record<BotRole, BotProfile> = {
     aimError: 0.026,
     safetyMarginSeconds: 0.48,
     huntRadius: 390,
-    loopDepth: [250, 470],
-    loopWidth: [230, 450],
-    trailRisk: [30, 59]
+    loopDepth: [mapDistance(250), mapDistance(470)],
+    loopWidth: [mapDistance(230), mapDistance(450)],
+    trailRisk: [mapCells(30), mapCells(59)]
   },
   survivor: {
     role: 'survivor',
@@ -123,9 +127,9 @@ const PROFILES: Record<BotRole, BotProfile> = {
     aimError: 0.045,
     safetyMarginSeconds: 0.78,
     huntRadius: 300,
-    loopDepth: [120, 235],
-    loopWidth: [115, 225],
-    trailRisk: [14, 29]
+    loopDepth: [mapDistance(120), mapDistance(235)],
+    loopWidth: [mapDistance(115), mapDistance(225)],
+    trailRisk: [mapCells(14), mapCells(29)]
   },
   opportunist: {
     role: 'opportunist',
@@ -138,9 +142,9 @@ const PROFILES: Record<BotRole, BotProfile> = {
     aimError: 0.04,
     safetyMarginSeconds: 0.4,
     huntRadius: 500,
-    loopDepth: [190, 380],
-    loopWidth: [175, 360],
-    trailRisk: [22, 49]
+    loopDepth: [mapDistance(190), mapDistance(380)],
+    loopWidth: [mapDistance(175), mapDistance(360)],
+    trailRisk: [mapCells(22), mapCells(49)]
   }
 };
 
@@ -151,6 +155,14 @@ const EXPANSION_CANDIDATES = 12;
 const OWN_TRAIL_SKIP_SEGMENTS = 7;
 const IMMEDIATE_LOOKAHEAD_SECONDS = 0.38;
 const BOUNDARY_LOOKAHEAD_SECONDS = 0.55;
+const BOUNDARY_RECOVERY_MARGIN = mapDistance(115);
+const BOUNDARY_PLAN_MARGIN = mapDistance(230);
+const BOUNDARY_PRESSURE_MARGIN = mapDistance(250);
+const BOUNDARY_PRESSURE_DIVISOR = mapDistance(180);
+const RECOVERY_PROJECTION_DISTANCE = mapDistance(175);
+const EXPANSION_RETURN_SEPARATION = mapDistance(92);
+const EXPANSION_SETUP_DISTANCE = mapDistance(72);
+const EXPANSION_PLAN_MAX_AGE_MS = Math.round(11_000 * MAP_LINEAR_SCALE);
 const MINIMUM_ROUTE_MARGIN = GAME.playerRadius + GAME.trailWidth / 2 + 12;
 
 export class BotSystem {
@@ -338,7 +350,7 @@ export class BotSystem {
     const radius = Math.hypot(bot.x, bot.y);
     const projectedRadius = Math.hypot(projectedBoundary.x, projectedBoundary.y);
     if (
-      radius > GAME.arenaRadius - 115 ||
+      radius > GAME.arenaRadius - BOUNDARY_RECOVERY_MARGIN ||
       projectedRadius > GAME.arenaRadius - GAME.playerRadius - 42
     ) {
       this.transition(memory, 'recover', now, 260);
@@ -577,7 +589,7 @@ export class BotSystem {
         boundary,
         desiredReturn,
         exit,
-        92,
+        EXPANSION_RETURN_SEPARATION,
         outward,
         memory.territoryCentroid
       );
@@ -680,7 +692,8 @@ export class BotSystem {
           y: start.y + (end.y - start.y) * ratio
         };
         const margin = GAME.arenaRadius - Math.hypot(point.x, point.y);
-        if (margin < 230) boundaryPenalty += (230 - margin) * 1.8;
+        if (margin < BOUNDARY_PLAN_MARGIN)
+          boundaryPenalty += (BOUNDARY_PLAN_MARGIN - margin) * 1.8;
         if (
           index >= 2 &&
           index <= 3 &&
@@ -718,7 +731,8 @@ export class BotSystem {
     plan: BotPlan,
     now: number
   ): boolean {
-    if (plan.kind !== 'expand' || now - plan.createdAt > 11_000) return false;
+    if (plan.kind !== 'expand' || now - plan.createdAt > EXPANSION_PLAN_MAX_AGE_MS)
+      return false;
     const waypoint = plan.waypoints[plan.waypointIndex];
     if (!waypoint) return false;
     if (Math.hypot(waypoint.x, waypoint.y) > GAME.arenaRadius - GAME.playerRadius - 35)
@@ -965,7 +979,8 @@ export class BotSystem {
     }
 
     const boundaryMargin = GAME.arenaRadius - Math.hypot(bot.x, bot.y);
-    if (boundaryMargin < 250) pressure += (250 - boundaryMargin) / 180;
+    if (boundaryMargin < BOUNDARY_PRESSURE_MARGIN)
+      pressure += (BOUNDARY_PRESSURE_MARGIN - boundaryMargin) / BOUNDARY_PRESSURE_DIVISOR;
     return pressure;
   }
 
@@ -1014,7 +1029,7 @@ export class BotSystem {
 
     for (let index = -6; index <= 6; index += 1) {
       const angle = normalizeAngle(preferred + index * 0.24);
-      const projected = project(bot, angle, 175);
+      const projected = project(bot, angle, RECOVERY_PROJECTION_DISTANCE);
       const radiusMargin = GAME.arenaRadius - Math.hypot(projected.x, projected.y);
       if (radiusMargin < GAME.playerRadius + 24) continue;
 
@@ -1147,7 +1162,7 @@ export class BotSystem {
     centroid: Vec2
   ): Vec2 {
     const inward = normalized({ x: centroid.x - exit.x, y: centroid.y - exit.y });
-    for (let distance = 72; distance >= 16; distance -= 8) {
+    for (let distance = EXPANSION_SETUP_DISTANCE; distance >= 16; distance -= 8) {
       const point = {
         x: exit.x + inward.x * distance,
         y: exit.y + inward.y * distance
@@ -1194,10 +1209,13 @@ export class BotSystem {
     const [minimum, maximum] = memory.profile.trailRisk;
     const leader = this.leaderTerritory(players);
     const behind = leader > 0 ? clamp01(1 - bot.territoryCells / leader) : 0;
-    const greedAdjustment = behind * memory.profile.expansionGreed * 8;
-    const leadingReduction = leader > 0 && bot.territoryCells >= leader * 0.96 ? memory.profile.caution * 5 : 0;
+    const greedAdjustment = behind * memory.profile.expansionGreed * mapCells(8);
+    const leadingReduction =
+      leader > 0 && bot.territoryCells >= leader * 0.96
+        ? memory.profile.caution * mapCells(5)
+        : 0;
     return Math.max(
-      12,
+      mapCells(12),
       Math.round(this.random.range(minimum, maximum) + greedAdjustment - leadingReduction)
     );
   }

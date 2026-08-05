@@ -26,16 +26,34 @@ describe('territory simulation', () => {
     ).toBe(false);
   });
 
-  it('creates starting territory and assigns a server-selected color', () => {
+  it('creates normal starting territory and assigns a server-selected color', () => {
     const { simulation } = create(20);
     const player = simulation.players.get('human')!;
-    expect(player.territoryCells).toBeGreaterThan(30);
+    expect(player.territoryCells).toBe(GAME.startingTerritoryCells);
     expect(
       PLAYER_SKINS.some((skin) => skin.id === player.skinId && skin.color === player.color)
     ).toBe(true);
   });
 
-  it('eliminates a player at the circular boundary and respawns them', () => {
+  it('starts four established bots at 2x, 3x, 4x and 5x normal territory', () => {
+    const simulation = new ArenaSimulation({ seed: 25 });
+    simulation.start(1000);
+    const territoryByName = new Map(
+      [...simulation.players.values()]
+        .filter((player) => player.kind === 'bot')
+        .map((player) => [player.name, player.territoryCells])
+    );
+
+    expect(territoryByName.get('Atlas')).toBe(GAME.startingTerritoryCells * 2);
+    expect(territoryByName.get('Canvas')).toBe(GAME.startingTerritoryCells * 3);
+    expect(territoryByName.get('Mosaic')).toBe(GAME.startingTerritoryCells * 4);
+    expect(territoryByName.get('Pixel')).toBe(GAME.startingTerritoryCells * 5);
+
+    for (const name of ['Inkwell', 'Patch', 'Doodle', 'Vector', 'Saffron', 'Indigo', 'Stencil', 'Contour'])
+      expect(territoryByName.get(name)).toBe(GAME.startingTerritoryCells);
+  });
+
+  it('eliminates a player at the circular boundary and respawns them normally', () => {
     const { simulation, onDeath } = create(30);
     const player = simulation.players.get('human')!;
     player.x = GAME.arenaRadius - 1;
@@ -49,7 +67,26 @@ describe('territory simulation', () => {
     expect(onDeath).toHaveBeenCalledOnce();
     simulation.step(1 / GAME.tickRate, 2000 + GAME.respawnDelayMs);
     expect(player.alive).toBe(true);
-    expect(player.territoryCells).toBeGreaterThan(0);
+    expect(player.territoryCells).toBe(GAME.startingTerritoryCells);
+  });
+
+  it('removes the established advantage after an established bot dies', () => {
+    const simulation = new ArenaSimulation({ seed: 35 });
+    simulation.start(1000);
+    const atlas = [...simulation.players.values()].find((player) => player.name === 'Atlas')!;
+    expect(atlas.territoryCells).toBe(GAME.startingTerritoryCells * 2);
+
+    atlas.x = GAME.arenaRadius - 1;
+    atlas.y = 0;
+    atlas.angle = 0;
+    atlas.targetAngle = 0;
+    atlas.moving = true;
+    simulation.step(1 / GAME.tickRate, 2000);
+    expect(atlas.alive).toBe(false);
+
+    simulation.step(1 / GAME.tickRate, 2000 + GAME.respawnDelayMs);
+    expect(atlas.alive).toBe(true);
+    expect(atlas.territoryCells).toBe(GAME.startingTerritoryCells);
   });
 
   it('maintains the configured bot population', () => {
@@ -104,11 +141,13 @@ describe('territory simulation', () => {
     expect({ x: player.x, y: player.y }).not.toEqual(spawn);
   });
 
-  it('uses a 60% larger arena and keeps humans centered until fresh input', () => {
-    expect(GAME.arenaRadius).toBe(1600);
-    expect(GAME.gridSize).toBe(208);
+  it('uses a 30% larger arena and keeps humans centered until fresh input', () => {
+    expect(GAME.arenaRadius).toBe(1824);
+    expect(GAME.gridSize).toBe(236);
     const simulation = new ArenaSimulation({ seed: 60, botTarget: 0 });
     simulation.start(1000);
+    expect(simulation.territory.claimableCells).toBe(40_860);
+
     const player = simulation.addHuman(
       'centered',
       { playerId: 'centered_001', displayName: 'Centered' },
